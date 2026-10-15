@@ -7,32 +7,36 @@ export default function Navbar() {
   const navigate = useNavigate();
 
   return (
-    <nav className="bg-indigo-600 text-white px-6 py-3 flex items-center justify-between">
-      <Link to="/" className="font-bold text-lg">SkillXchange</Link>
-      <div className="flex gap-4 items-center text-sm">
-        <Link to="/browse">Browse</Link>
-        {user && <Link to="/requests">My Requests</Link>}
-        {user && <Link to="/profile">Profile</Link>}
-        {user?.role === "admin" && <Link to="/admin">Admin</Link>}
+    <nav className="sticky top-0 z-50  text-black px-6 py-4 flex items-center justify-between">
+      <Link to="/" className="font-display text-2xl italic tracking-tight text-moss-600 hover:text-black transition-colors">
+        Skillxchange
+      </Link>
+      <div className="flex gap-5 items-center text-sm font-medium">
+        <Link to="/browse" className="text-moss-600 hover:text-black transition-colors">Browse</Link>
+        {user && <Link to="/requests" className="text-moss-600 hover:text-black transition-colors">My Requests</Link>}
+        {user && <Link to="/profile" className="text-moss-600 hover:text-black transition-colors">Profile</Link>}
+        {user?.role === "admin" && <Link to="/admin" className="text-moss-600 hover:text-black transition-colors">Admin</Link>}
         {user ? (
           <>
-            <span className="opacity-80">
-              {user.name} {!user.verified && user.role !== "admin" && "(unverified)"}
+            <span className="text-black opacity-70 hidden sm:inline">
+              {user.name}{!user.verified && user.role !== "admin" && " · unverified"}
             </span>
             <button
-              className="bg-indigo-800 px-3 py-1 rounded"
+              className="text-moss-600  px-3 py-1.5 hover:text-black transition-colors"
               onClick={() => {
                 logout();
                 navigate("/login");
               }}
             >
-              Logout
+              Log out
             </button>
           </>
         ) : (
           <>
-            <Link to="/login">Login</Link>
-            <Link to="/register" className="bg-indigo-800 px-3 py-1 rounded">Sign Up</Link>
+            <Link to="/login" className="text-moss-600 hover:text-black transition-colors">Log in</Link>
+            <Link to="/register" className="text-moss-600 hover:text-black transition-colors">
+              Join
+            </Link>
           </>
         )}
       </div>

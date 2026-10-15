@@ -2,6 +2,7 @@ import { Router } from "express";
 import { query } from "../db.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { anthropic } from "../anthropicClient.js";
+import { buildExchangeGraph, findCyclesForUser, rankCycles } from "../matching/cycleMatcher.js";
 
 const router = Router();
 
@@ -80,7 +81,6 @@ router.post("/wanted", requireAuth, requireVerified, async (req, res) => {
 });
 
 // GET /api/skills/matches - mutual matches for the logged-in student.
-// A "match" = someone offers a category you want, AND you offer a category they want.
 router.get("/matches", requireAuth, async (req, res) => {
   const sql = `
     SELECT DISTINCT
@@ -109,9 +109,6 @@ router.get("/matches", requireAuth, async (req, res) => {
 });
 
 // GET /api/skills/ai-matches - semantic matching using Claude.
-// Goes beyond exact category matches: reads what the student is looking for
-// (including their free-text notes) and compares it against every active
-// listing's title/description to find good matches even across categories.
 router.get("/ai-matches", requireAuth, async (req, res) => {
   if (!process.env.ANTHROPIC_API_KEY) {
     return res.status(503).json({
@@ -120,6 +117,7 @@ router.get("/ai-matches", requireAuth, async (req, res) => {
   }
 
   try {
+    // 1. What the student is looking for
     const wantedResult = await query(
       `SELECT skills_wanted.notes, skill_categories.name AS category_name
        FROM skills_wanted
@@ -127,13 +125,19 @@ router.get("/ai-matches", requireAuth, async (req, res) => {
        WHERE skills_wanted.user_id = $1`,
       [req.user.id]
     );
+
     if (wantedResult.rows.length === 0) {
-      return res.json({ matches: [], message: "Add a skill you're looking for on your profile first." });
+      return res.json({
+        matches: [],
+        message: "Add a skill you're looking for on your profile first.",
+      });
     }
 
+    // 2. Candidate listings (capped for cost & prompt size)
     const listingsResult = await query(
       `SELECT skills_offered.id, skills_offered.title, skills_offered.description,
-              skill_categories.name AS category_name, users.name AS provider_name, users.id AS provider_id
+              skill_categories.name AS category_name,
+              users.name AS provider_name, users.id AS provider_id
        FROM skills_offered
        JOIN skill_categories ON skill_categories.id = skills_offered.category_id
        JOIN users ON users.id = skills_offered.user_id
@@ -141,15 +145,23 @@ router.get("/ai-matches", requireAuth, async (req, res) => {
        LIMIT 25`,
       [req.user.id]
     );
+
     if (listingsResult.rows.length === 0) {
-      return res.json({ matches: [], message: "No listings from other students yet." });
+      return res.json({
+        matches: [],
+        message: "No listings from other students yet.",
+      });
     }
 
     const wantedText = wantedResult.rows
       .map((w) => `- Category: ${w.category_name}. Notes: ${w.notes || "none"}`)
       .join("\n");
+
     const listingsText = listingsResult.rows
-      .map((l) => `ID ${l.id} | ${l.category_name} | "${l.title}" by ${l.provider_name}: ${l.description || "no description"}`)
+      .map(
+        (l) =>
+          `ID ${l.id} | ${l.category_name} | "${l.title}" by ${l.provider_name}: ${l.description || "no description"}`
+      )
       .join("\n");
 
     const prompt = `A student is looking for help with these things:
@@ -158,30 +170,127 @@ ${wantedText}
 Here are skill listings posted by other students:
 ${listingsText}
 
-Return ONLY valid JSON (no markdown, no preamble) as an array of the best matches, ranked best first, in this exact shape:
-[{"listing_id": number, "score": number (0-100), "reason": "one short sentence explaining the match"}]
+Return ONLY a valid JSON array (no markdown fences, no explanation, no preamble). 
+Each object must have exactly these keys:
+- "listing_id": number
+- "score": number between 0 and 100
+- "reason": one short sentence explaining why it matches
 
-Only include listings that are genuinely relevant (score 50+). Return an empty array if nothing is relevant.`;
+Only include listings that are genuinely relevant (score 50 or higher).
+If nothing is relevant, return an empty array: []`;
 
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1000,
+      model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6",
+      max_tokens: 1200,
       messages: [{ role: "user", content: prompt }],
     });
 
-    const raw = response.content.map((b) => (b.type === "text" ? b.text : "")).join("");
-    const cleaned = raw.replace(/```json|```/g, "").trim();
-    const ranked = JSON.parse(cleaned);
+    // Extract text content safely
+    const raw = response.content
+      .map((b) => (b.type === "text" ? b.text : ""))
+      .join("")
+      .trim();
 
+    // Robust JSON extraction (handles markdown fences or extra text)
+    let ranked = [];
+    try {
+      ranked = JSON.parse(raw);
+    } catch {
+      const match = raw.match(/\[[\s\S]*\]/);
+      if (match) {
+        ranked = JSON.parse(match[0]);
+      } else {
+        console.error("AI MATCH PARSE FAIL. Raw response:", raw);
+        return res.status(500).json({
+          error: "AI returned an unreadable response. Please try again.",
+        });
+      }
+    }
+
+    if (!Array.isArray(ranked)) {
+      return res.status(500).json({
+        error: "AI returned unexpected format. Please try again.",
+      });
+    }
+
+    // Enrich with full listing data
     const byId = Object.fromEntries(listingsResult.rows.map((l) => [l.id, l]));
     const matches = ranked
-      .filter((r) => byId[r.listing_id])
-      .map((r) => ({ ...byId[r.listing_id], score: r.score, reason: r.reason }));
+      .filter((r) => r && byId[r.listing_id] && Number(r.score) >= 50)
+      .map((r) => ({
+        ...byId[r.listing_id],
+        score: Math.round(Number(r.score)),
+        reason: r.reason || "",
+      }))
+      .sort((a, b) => b.score - a.score);
 
     res.json({ matches });
   } catch (err) {
-    console.error("AI MATCH ERROR:", err.message, err.error||"");
-    res.status(500).json({ error: "AI matching failed", details: err.message });
+    console.error("AI MATCH ERROR:", err.message, err.error || "");
+
+    if (err.status === 401 || err.message?.includes("authentication")) {
+      return res.status(401).json({
+        error: "Invalid Anthropic API key. Check ANTHROPIC_API_KEY in backend/.env",
+      });
+    }
+    if (err.status === 429) {
+      return res.status(429).json({
+        error: "Anthropic rate limit hit. Wait a moment and try again.",
+      });
+    }
+
+    res.status(500).json({
+      error: "AI matching failed",
+      detail: err.message,
+    });
+  }
+});
+
+// GET /api/skills/cycles - multi-party (circular) exchange matching.
+router.get("/cycles", requireAuth, async (req, res) => {
+  const maxLength = Math.min(Number(req.query.maxLength) || 4, 5);
+
+  try {
+    const offersResult = await query(
+      `SELECT skills_offered.id, skills_offered.user_id, skills_offered.category_id,
+              skills_offered.title, skill_categories.name AS category_name
+       FROM skills_offered
+       JOIN skill_categories ON skill_categories.id = skills_offered.category_id
+       WHERE skills_offered.active = TRUE`
+    );
+    const wantsResult = await query(`SELECT user_id, category_id FROM skills_wanted`);
+    const usersResult = await query(`SELECT id, name FROM users`);
+
+    const nameById = Object.fromEntries(usersResult.rows.map((u) => [u.id, u.name]));
+
+    const edges = buildExchangeGraph(offersResult.rows, wantsResult.rows);
+    const cycles = rankCycles(findCyclesForUser(edges, req.user.id, maxLength));
+
+    const readable = cycles.map((cycle) => ({
+      participants: cycle.length,
+      steps: cycle.map((step) => ({
+        ...step,
+        fromName: nameById[step.from] || `User ${step.from}`,
+        toName: nameById[step.to] || `User ${step.to}`,
+      })),
+    }));
+
+    const pairwiseCount = readable.filter((c) => c.participants === 2).length;
+    const multiPartyCount = readable.filter((c) => c.participants >= 3).length;
+
+    res.json({
+      cycles: readable,
+      stats: {
+        total: readable.length,
+        pairwise: pairwiseCount,
+        multiParty: multiPartyCount,
+        unlockedByCycleDetection: multiPartyCount,
+        maxLengthSearched: maxLength,
+      },
+    });
+  } catch (err) {
+    console.error("CYCLE MATCH ERROR:", err.message);
+    res.status(500).json({ error: "Failed to compute exchange cycles" });
   }
 });
 

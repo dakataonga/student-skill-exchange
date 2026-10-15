@@ -8,8 +8,36 @@ export default function Profile() {
   const [matches, setMatches] = useState([]);
   const [message, setMessage] = useState("");
   const [aiMatches, setAiMatches] = useState(null);
+  const [cycles, setCycles] = useState(null);
+  const [cycleStats, setCycleStats] = useState(null);
+  const [cycleLoading, setCycleLoading] = useState(false);
+  const [cycleError, setCycleError] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
+
+  async function findCycles() {
+    setCycleLoading(true);
+    setCycleError("");
+    try {
+      const data = await api.get("/skills/cycles");
+      setCycles(data.cycles);
+      setCycleStats(data.stats);
+    } catch (err) {
+      setCycleError(err.message);
+    } finally {
+      setCycleLoading(false);
+    }
+  }
+
+  const [offerForm, setOfferForm] = useState({
+    category_id: "", title: "", description: "", payment_type: "barter", price: "", availability: "",
+  });
+  const [wantForm, setWantForm] = useState({ category_id: "", notes: "" });
+
+  useEffect(() => {
+    api.get("/skills/categories").then(setCategories);
+    api.get("/skills/matches").then(setMatches).catch(() => {});
+  }, []);
 
   async function findAiMatches() {
     setAiLoading(true);
@@ -24,16 +52,6 @@ export default function Profile() {
       setAiLoading(false);
     }
   }
-
-  const [offerForm, setOfferForm] = useState({
-    category_id: "", title: "", description: "", payment_type: "barter", price: "", availability: "",
-  });
-  const [wantForm, setWantForm] = useState({ category_id: "", notes: "" });
-
-  useEffect(() => {
-    api.get("/skills/categories").then(setCategories);
-    api.get("/skills/matches").then(setMatches).catch(() => {});
-  }, []);
 
   async function submitOffer(e) {
     e.preventDefault();
@@ -61,6 +79,7 @@ export default function Profile() {
       setMessage(err.message);
     }
   }
+
   async function submitWant(e) {
     e.preventDefault();
     try {
@@ -108,7 +127,7 @@ export default function Profile() {
                  value={offerForm.price} onChange={(e) => setOfferForm({ ...offerForm, price: e.target.value })} />
           <input className="border p-2 rounded col-span-2" placeholder="Availability (e.g. weekday evenings)"
                  value={offerForm.availability} onChange={(e) => setOfferForm({ ...offerForm, availability: e.target.value })} />
-          <button className="bg-indigo-600 text-white py-2 rounded col-span-2">Post listing</button>
+          <button className="bg-moss-600 text-white py-1.5 text-sm font-medium hover:bg-black transition-colors rounded col-span-2 w-60  mx-auto px-10">Post listing</button>
         </form>
       </section>
 
@@ -122,7 +141,7 @@ export default function Profile() {
           </select>
           <input className="border p-2 rounded flex-1" placeholder="Notes (optional)"
                  value={wantForm.notes} onChange={(e) => setWantForm({ ...wantForm, notes: e.target.value })} />
-          <button className="bg-indigo-600 text-white px-4 rounded">Add</button>
+          <button className="bg-moss-600 text-white hover:bg-black px-4 rounded">Add</button>
         </form>
       </section>
 
@@ -132,31 +151,106 @@ export default function Profile() {
           <button
             onClick={findAiMatches}
             disabled={aiLoading}
-            className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm disabled:opacity-50"
+            className="bg-moss-600 text-white hover:bg-black px-3 py-1.5 rounded text-sm disabled:opacity-50"
           >
             {aiLoading ? "Thinking..." : "Find matches with AI"}
           </button>
         </div>
         <p className="text-xs text-gray-500 mb-2">
           Uses Claude to compare what you're looking for against every listing's
-          full description, not just its category — so it can catch relevant matches
-          that pure category search would miss.
+          full description, not just its category.
         </p>
+
         {aiError && <p className="text-sm text-red-600">{aiError}</p>}
+
+        {aiMatches && aiMatches.length === 0 && !aiError && (
+          <p className="text-sm text-gray-500 mt-2">
+            No strong matches found. Try adding more detailed notes under “Skills I’m looking for”, or wait for more listings.
+          </p>
+        )}
+
         {aiMatches && aiMatches.length > 0 && (
           <ul className="space-y-2 mt-2">
             {aiMatches.map((m) => (
               <li key={m.id} className="text-sm border-b pb-2">
                 <div className="flex justify-between">
                   <strong>{m.title}</strong>
-                  <span className="text-indigo-700">{m.score}% match</span>
+                  <span className="text-indigo-700 font-medium">{m.score}% match</span>
                 </div>
-                <p className="text-gray-600">{m.provider_name} — {m.category_name}</p>
+                <p className="text-gray-600">
+                  {m.provider_name} — {m.category_name}
+                </p>
                 <p className="italic text-gray-500 mt-1">{m.reason}</p>
               </li>
             ))}
           </ul>
         )}
+      </section>
+
+      <section className="border-2 border-amber-300 rounded-lg p-4 bg-amber-50">
+        <div className="flex justify-between items-center mb-2">
+          <h2 className="font-semibold">🔄 Circular exchange matches</h2>
+          <button
+            onClick={findCycles}
+            disabled={cycleLoading}
+            className="bg-amber-600 text-white px-3 py-1.5 rounded text-sm disabled:opacity-50"
+          >
+            {cycleLoading ? "Searching..." : "Find exchange loops"}
+          </button>
+        </div>
+        <p className="text-xs text-gray-600 mb-3">
+          Direct swaps need a "double coincidence of wants" — you want what they
+          offer AND they want what you offer. That rarely happens. This finds
+          exchange <strong>loops</strong> instead: you teach someone, they teach
+          someone else, and that person teaches you.
+        </p>
+
+        {cycleError && <p className="text-sm text-red-600">{cycleError}</p>}
+
+        {cycleStats && (
+          <div className="flex gap-3 mb-3 text-xs">
+            <div className="bg-white border rounded px-3 py-2">
+              <div className="text-lg font-bold">{cycleStats.pairwise}</div>
+              <div className="text-gray-500">direct 2-way swaps</div>
+            </div>
+            <div className="bg-white border-2 border-amber-400 rounded px-3 py-2">
+              <div className="text-lg font-bold text-amber-700">{cycleStats.multiParty}</div>
+              <div className="text-gray-500">multi-party loops</div>
+            </div>
+            <div className="bg-white border rounded px-3 py-2">
+              <div className="text-lg font-bold">{cycleStats.total}</div>
+              <div className="text-gray-500">total exchanges possible</div>
+            </div>
+          </div>
+        )}
+
+        {cycles && cycles.length === 0 && (
+          <p className="text-sm text-gray-500">
+            No exchange loops found yet. Add more skills you offer and want, or
+            wait for more students to join.
+          </p>
+        )}
+
+        {cycles && cycles.map((cycle, i) => (
+          <div key={i} className="bg-white border rounded p-3 mb-2">
+            <p className="text-xs font-medium text-amber-700 mb-2">
+              {cycle.participants}-way exchange
+              {cycle.participants === 2 && " (direct swap)"}
+            </p>
+            {cycle.steps.map((step, j) => (
+              <div key={j} className="text-sm flex items-center gap-2 py-0.5">
+                <span className="text-gray-400">{j + 1}.</span>
+                <span className="font-medium">{step.fromName}</span>
+                <span className="text-gray-400">teaches</span>
+                <span className="bg-indigo-100 text-indigo-700 px-1.5 rounded text-xs">
+                  {step.skillTitle}
+                </span>
+                <span className="text-gray-400">to</span>
+                <span className="font-medium">{step.toName}</span>
+              </div>
+            ))}
+          </div>
+        ))}
       </section>
 
       <section className="border rounded-lg p-4">
