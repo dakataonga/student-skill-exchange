@@ -83,7 +83,7 @@ export default function Login() {
       <div className="text-right">
   <Link
     to="/forgot-password"
-    className="text-sm text-moss-600 hover:text-white transition-colors"
+    className="text-sm text-moss-600 hover:text-black transition-colors"
   >
     Forgot password?
   </Link>
