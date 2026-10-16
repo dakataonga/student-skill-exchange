@@ -10,12 +10,16 @@ import Browse from "./pages/Browse.jsx";
 import Profile from "./pages/Profile.jsx";
 import Requests from "./pages/Requests.jsx";
 import Admin from "./pages/Admin.jsx";
+import ForgotPassword from "./pages/ForgotPassword.jsx";
+import ResetPassword from "./pages/ResetPassword.jsx";
 
 export default function App() {
   return (
     <AuthProvider>
       <Navbar />
       <Routes>
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+<Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/about" element={<About />} />
         <Route path="/" element={<Navigate to="/browse" />} />
         <Route path="/login" element={<Login />} />

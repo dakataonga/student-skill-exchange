@@ -80,6 +80,14 @@ export default function Login() {
           {loading ? "Logging in..." : "Log in"}
         </button>
       </form>
+      <div className="text-right">
+  <Link
+    to="/forgot-password"
+    className="text-sm text-moss-600 hover:text-black transition-colors"
+  >
+    Forgot password?
+  </Link>
+</div>
 
       <p className="text-sm mt-3">
         No account?{" "}
@@ -88,5 +96,8 @@ export default function Login() {
         </Link>
       </p>
     </div>
+
+    
+    
   );
 }
