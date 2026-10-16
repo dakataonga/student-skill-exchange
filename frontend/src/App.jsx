@@ -1,4 +1,5 @@
 import React from "react";
+import About from "./pages/About.jsx";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./AuthContext.jsx";
 import Navbar from "./components/Navbar.jsx";
@@ -15,6 +16,7 @@ export default function App() {
     <AuthProvider>
       <Navbar />
       <Routes>
+        <Route path="/about" element={<About />} />
         <Route path="/" element={<Navigate to="/browse" />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
