@@ -40,7 +40,8 @@ export default function Register() {
                value={form.student_id} onChange={(e) => update("student_id", e.target.value)} required />
         <input className="border p-2 rounded" placeholder="Password" type="password"
                value={form.password} onChange={(e) => update("password", e.target.value)} required />
-        <button className="bg-indigo-600 text-white py-2 rounded disabled:opacity-50" disabled={loading}>
+        <button className= "bg-moss-600 text-white py-2 rounded flex items-center justify-center gap-2 disabled:opacity-70"
+        >
           {loading ? "Creating account..." : "Sign up"}
         </button>
       </form>

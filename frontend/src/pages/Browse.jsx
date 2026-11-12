@@ -38,9 +38,14 @@ function SuccessToast({ text, onClose }) {
   }, [onClose]);
 
   return (
-    <div className="fixed top-20 right-6 z-[100] bg-moss-600 text-white px-5 py-3 rounded-lg shadow-lg flex items-center gap-3 max-w-sm">
-      <span className="text-lg">✓</span>
-      <span className="text-sm">{text}</span>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none px-4">
+      <div className="bg-moss-600 text-white px-6 py-4 rounded-lg shadow-xl flex items-center gap-3 max-w-sm pointer-events-auto">
+        <span className="text-lg">✓</span>
+        <span className="text-sm">{text}</span>
+        <button onClick={onClose} className="ml-2 text-white/80 hover:text-white text-lg leading-none">
+          ×
+        </button>
+      </div>
     </div>
   );
 }

@@ -8,6 +8,7 @@ import requestsRoutes from "./routes/requests.js";
 import reviewsRoutes from "./routes/reviews.js";
 import adminRoutes from "./routes/admin.js";
 import reportsRoutes from "./routes/reports.js";
+import accountRoutes from "./routes/account.js";
 
 dotenv.config();
 const app = express();
@@ -23,6 +24,7 @@ app.use("/api/requests", requestsRoutes);
 app.use("/api/reviews", reviewsRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/account", accountRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);
