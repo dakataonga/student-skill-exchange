@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import { query } from "../db.js";
-
+import { requireAuth } from "../middleware/auth.js";
 const router = Router();
 
 // Email transporter
@@ -196,5 +196,50 @@ router.post("/login", async (req, res) => {
     res.status(500).json({ error: "Login failed" });
   }
 });
+
+// ─────────────────────────────────────────
+// POST /api/auth/delete-request
+// Submit an account deletion request
+// ─────────────────────────────────────────
+router.post("/delete-request", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { reason } = req.body;
+
+    // Check whether the user already has a pending request
+    const existing = await query(
+      `SELECT id FROM deletion_requests
+       WHERE user_id = $1 AND status = 'pending'`,
+      [userId]
+    );
+
+    if (existing.rows.length > 0) {
+      return res.status(409).json({
+        error: "You already have a pending account deletion request."
+      });
+    }
+
+    // Save the deletion request in PostgreSQL
+    const result = await query(
+      `INSERT INTO deletion_requests (user_id, reason)
+       VALUES ($1, $2)
+       RETURNING id, user_id, reason, status, created_at`,
+      [userId, reason || "User requested account deletion"]
+    );
+
+    return res.status(201).json({
+      message: "Account deletion request submitted successfully.",
+      request: result.rows[0]
+    });
+
+  } catch (err) {
+    console.error("Account deletion request error:", err);
+
+    return res.status(500).json({
+      error: "Failed to submit account deletion request."
+    });
+  }
+});
+
 
 export default router;
