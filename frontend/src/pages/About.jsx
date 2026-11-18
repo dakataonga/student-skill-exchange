@@ -126,15 +126,6 @@ export default function About() {
               {error}
             </p>
           )}
-
-          <button
-            type="button"
-            onClick={handleDeleteRequest}
-            disabled={loading}
-            className="bg-red-600 text-white px-5 py-2 rounded-md hover:bg-red-700 disabled:opacity-60 transition-colors"
-          >
-            {loading ? "Submitting request..." : "Request Account Deletion"}
-          </button>
         </section>
       )}
     </div>

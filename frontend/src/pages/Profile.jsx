@@ -14,6 +14,8 @@ export default function Profile() {
   const [cycleError, setCycleError] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteMsg, setDeleteMsg] = useState("");
 
   async function findCycles() {
     setCycleLoading(true);
@@ -89,6 +91,28 @@ export default function Profile() {
       api.get("/skills/matches").then(setMatches);
     } catch (err) {
       setMessage(err.message);
+    }
+  }
+    async function requestAccountDeletion() {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete your account?\n\nThis will send a request to the admin. Once approved, your account and all your data will be permanently deleted."
+    );
+    if (!confirmed) return;
+
+    setDeleteLoading(true);
+    setDeleteMsg("");
+    try {
+      await api.post("/auth/delete-request", {
+        reason: "User requested account deletion",
+      });
+      alert(
+        "Account deletion request submitted successfully.\n\nAn administrator will review and approve it.\n\nAfter approval your account will be permanently deleted.\nYou can then create a new account by signing up again."
+      );
+      setDeleteMsg("Deletion request submitted. Waiting for admin approval.");
+    } catch (err) {
+      setDeleteMsg(err.message || "Failed to submit deletion request");
+    } finally {
+      setDeleteLoading(false);
     }
   }
 
@@ -267,6 +291,26 @@ export default function Profile() {
             </li>
           ))}
         </ul>
+      </section>
+            {/* ===== Account Deletion ===== */}
+      <section className="border border-red-200 rounded-lg p-4 bg-red-50 mt-8">
+        <h2 className="font-semibold mb-2 text-red-700">Danger Zone</h2>
+        <p className="text-sm text-gray-600 mb-3">
+          Request permanent deletion of your account. An administrator must approve the request.
+          After approval all your data (listings, requests, reviews) will be removed.
+        </p>
+        {deleteMsg && (
+          <p className={`text-sm mb-3 ${deleteMsg.includes("submitted") ? "text-green-700" : "text-red-600"}`}>
+            {deleteMsg}
+          </p>
+        )}
+        <button
+          onClick={requestAccountDeletion}
+          disabled={deleteLoading}
+          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm disabled:opacity-50"
+        >
+          {deleteLoading ? "Submitting..." : "Request Account Deletion"}
+        </button>
       </section>
     </div>
   );
